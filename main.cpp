@@ -6,22 +6,50 @@
 
 using namespace std;
 
+// Wartość 1 = podział ekranu na pół dla dwóch kamer
+// Wartość 2 = obraz z dwóch kamer w dwóch ćwiartkach dla dwóch kamer
+// Inne wartości zwężają dwie ćwiartki dla dwóch kamer, dla większej ilości kamer parametr ten nie ma znaczenia
+#define FOUR_FRAMES_GRID_FOR_TWO_CAMERAS 2
 
-
-// Rozmiary okna
-#define WINDOW_WIDTH 800
-#define WINDOW_HEIGHT 600
-
-#define COLS 5
-#define ROWS 2
-
-#define DIVIDER COLS
+// Minimalna wartość dla jednej kamery
+unsigned long cols = 1,
+              rows = 1;
 
 // Identyfikatory tekstur OpenGL
 vector<GLuint> textures;
 
+// Ścieżki do kamer
+vector<string> camerasPaths = {"/dev/video2" , "/dev/video0"};
 
-vector<string> camerasPaths = {"/dev/video2", "/dev/video0"};
+void countColsAndRowsForGrid(){
+
+    unsigned long count = camerasPaths.size();
+
+    if(count == 1){
+
+        cols = rows = count;
+
+    }else if(count%2 == 1){
+
+        cols = (count-1)/2;
+        rows = cols + 1;
+
+    }else if(count%2 == 0) {
+
+        if (count > 2) {
+
+            cols = rows = count / 2;
+
+        } else {
+
+            cols = count;
+            rows = 1 * FOUR_FRAMES_GRID_FOR_TWO_CAMERAS;
+        }
+    }else{
+
+        cols = rows = 1;
+    }
+}
 
 // Dostępne kamery
 vector<cv::VideoCapture> cameras;
@@ -32,7 +60,7 @@ vector<cv::Mat> frames;
 
 void generateTexturesAndFrames(unsigned long);
 
-void displayCamerasFrames(unsigned short rows, unsigned short cols);
+void displayCamerasFrames(unsigned long rows, unsigned long cols);
 
 // Funkcja wywoływana przy zmianie rozmiaru okna
 void reshape(int width, int height) {
@@ -45,13 +73,14 @@ void reshape(int width, int height) {
 
 // Funkcja wywoływana przy rysowaniu zawartości okna
 void display() {
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glLoadIdentity();
 
     glEnable(GL_TEXTURE_2D);
     glColor3f(1.0f, 1.0f, 1.0f);
 
-    displayCamerasFrames(ROWS,COLS);
+    displayCamerasFrames(rows, cols);
 
     glDisable(GL_TEXTURE_2D);
 
@@ -64,7 +93,7 @@ void initGL() {
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-    generateTexturesAndFrames(ROWS*COLS);
+    generateTexturesAndFrames(rows * cols);
 }
 
 // Funkcja odczytująca klatki z kamery argument int konieczny dla funkcji glutTimerFunc
@@ -110,7 +139,7 @@ void generateTexturesAndFrames(unsigned long number) {
     }
 }
 
-void displayCamerasFrames(unsigned short rows, unsigned short cols) {
+void displayCamerasFrames(unsigned long rows, unsigned long cols) {
 
 
     if (frames.empty()) {
@@ -129,13 +158,13 @@ void displayCamerasFrames(unsigned short rows, unsigned short cols) {
         exit(EXIT_FAILURE);
     }
 
-    float x = (WINDOW_WIDTH / DIVIDER), y = (WINDOW_HEIGHT / DIVIDER);
+    float x = (glutGet(GLUT_SCREEN_WIDTH) / cols), y = (glutGet(GLUT_SCREEN_HEIGHT) / rows);
 
-    unsigned short t = 0;
+    unsigned long t = 0;
 
-    for (unsigned short k = 0; k < rows; k++) {
+    for (unsigned long k = 0; k < rows; k++) {
 
-        for (unsigned short j = 0; j <cols ; j++) {
+        for (unsigned long j = 0; j <cols ; j++) {
 
             if(maxTextures<=t) break;
 
@@ -148,16 +177,16 @@ void displayCamerasFrames(unsigned short rows, unsigned short cols) {
                 glBegin(GL_QUADS);
                 glTexCoord2f(0.0f, 0.0f);
                 glVertex2f((x * j), (y * k));
-                cout << "p00 = " << (x * j) << ":" << (y * k) << endl;
+                //cout << "p00 = " << (x * j) << ":" << (y * k) << endl;
                 glTexCoord2f(1.0f, 0.0f);
                 glVertex2f((x + (x * j)), (y * k));
-                cout << "p10 = " << (x + (x * j)) << ":" << (y * k) << endl;
+                //cout << "p10 = " << (x + (x * j)) << ":" << (y * k) << endl;
                 glTexCoord2f(1.0f, 1.0f);
                 glVertex2f((x + (x * j)), (y + (y * k)));
-                cout << "p11 = " << (x + (x * j)) << ":" << (y + (y * k)) << endl;
+                //cout << "p11 = " << (x + (x * j)) << ":" << (y + (y * k)) << endl;
                 glTexCoord2f(0.0f, 1.0f);
                 glVertex2f((x * j), (y + (y * k)));
-                cout << "p01 = " << (x * j) << ":" << (y + (y * k)) << endl;
+                //cout << "p01 = " << (x * j) << ":" << (y + (y * k)) << endl;
                 glEnd();
 
                 t++;
@@ -173,7 +202,7 @@ void initCameras() {
 
     int k = 1;
 
-    for (auto i: camerasPaths) {
+    for (const auto& i: camerasPaths) {
 
         cameras.emplace_back(i);
     }
@@ -187,8 +216,8 @@ void initCameras() {
         }
 
         // Ustawienie rozmiarów klatek
-        i.set(cv::CAP_PROP_FRAME_WIDTH, WINDOW_WIDTH / DIVIDER);
-        i.set(cv::CAP_PROP_FRAME_HEIGHT, WINDOW_HEIGHT / DIVIDER);
+        i.set(cv::CAP_PROP_FRAME_WIDTH, glutGet(GLUT_SCREEN_WIDTH) / cols);
+        i.set(cv::CAP_PROP_FRAME_HEIGHT, glutGet(GLUT_SCREEN_HEIGHT) / rows);
 
         k++;
     }
@@ -197,10 +226,12 @@ void initCameras() {
 
 int main(int argc, char **argv) {
 
+    countColsAndRowsForGrid();
 
     glutInit(&argc, argv);
+
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
-    glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+    glutInitWindowSize(glutGet(GLUT_SCREEN_WIDTH), glutGet(GLUT_SCREEN_HEIGHT));
     glutCreateWindow("Monitoring");
 
     glutReshapeFunc(reshape);
