@@ -6,6 +6,7 @@ find_package(OpenCV CONFIG REQUIRED)
 add_executable(MonitoringSystem main.cpp)
 target_link_libraries(MonitoringSystem PRIVATE
         opencv_videoio
+        opencv_highgui
         GL
         glut
         )
