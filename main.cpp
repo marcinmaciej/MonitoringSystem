@@ -1,10 +1,11 @@
 #include <GL/freeglut.h>
-#include <opencv2/opencv.hpp>
-
+#include <opencv4/opencv2/opencv.hpp>
+#include <vector>
 
 #include <iostream>
 
 using namespace std;
+
 
 
 // Rozmiary okna
@@ -20,7 +21,7 @@ using namespace std;
 vector<GLuint> textures;
 
 
-vector<string> camerasPaths = {"/dev/video2", "/dev/video0","/dev/video2", "/dev/video0","/dev/video2", "/dev/video0","/dev/video2", "/dev/video0"};
+vector<string> camerasPaths = {"/dev/video2", "/dev/video0"};
 
 // Dostępne kamery
 vector<cv::VideoCapture> cameras;
@@ -105,7 +106,7 @@ void generateTexturesAndFrames(unsigned long number) {
 
         textures.emplace_back(initTexture());
 
-        frames.emplace_back(cv::Mat());
+        frames.emplace_back();
     }
 }
 
@@ -174,7 +175,7 @@ void initCameras() {
 
     for (auto i: camerasPaths) {
 
-        cameras.push_back(cv::VideoCapture(i));
+        cameras.emplace_back(i);
     }
 
     // Inicjalizacja kamer
