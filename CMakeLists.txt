@@ -7,6 +7,12 @@ add_executable(MonitoringSystem main.cpp)
 target_link_libraries(MonitoringSystem PRIVATE
         opencv_videoio
         opencv_highgui
+        opencv_core
+        opencv_imgproc
+        opencv_dnn
+        opencv_objdetect
+        opencv_video
+        opencv_imgcodecs
         GL
         glut
         )
