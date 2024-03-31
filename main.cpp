@@ -118,9 +118,10 @@ void captureFrames(int) {
 
         tickmeter.stop();
 
-        auto t = time(0);
+        auto t = time(nullptr);
         auto now = localtime(&t);
         char result[80];
+
         strftime(result, sizeof(result), "%Y-%m-%d.%X", now);
 
         string fpsString = format("FPS: %.2f %s", tickmeter.getFPS(), result);
@@ -216,8 +217,9 @@ void displayCamerasFrames(unsigned long rows, unsigned long cols) {
 
 void initCameras() {
 
-    frameWidth = glutGet(GLUT_SCREEN_WIDTH) / cols;
-    frameHeight = glutGet(GLUT_SCREEN_HEIGHT) / rows;
+//    frameWidth = glutGet(GLUT_SCREEN_WIDTH) / cols;
+//    frameHeight = glutGet(GLUT_SCREEN_HEIGHT) / rows;
+
 
     int k = 0;
 
@@ -229,11 +231,13 @@ void initCameras() {
 
         CV_Assert(cam.isOpened());
 
-
         // Ustawienie rozmiarów klatek
-        cam.set(cv::CAP_PROP_FRAME_WIDTH, frameWidth);
-        cam.set(cv::CAP_PROP_FRAME_HEIGHT, frameHeight);
+//        cam.set(cv::CAP_PROP_FRAME_WIDTH, frameWidth);
+//        cam.set(cv::CAP_PROP_FRAME_HEIGHT, frameHeight);
         cam.set(CAP_PROP_FPS,FPS);
+
+//        cout<<"Frame Width: "<<cam.get(CAP_PROP_FRAME_WIDTH)<<" Frame Height: "<<cam.get(CAP_PROP_FRAME_HEIGHT)<<endl;
+
 
         k++;
     }
