@@ -8,13 +8,23 @@
 using namespace std;
 using namespace cv;
 
-// Wartość 1 = podział ekranu na pół dla dwóch kamer
-// Wartość 2 = obraz z dwóch kamer w dwóch ćwiartkach dla dwóch kamer
-// Inne wartości zwężają dwie ćwiartki dla dwóch kamer, dla większej ilości kamer parametr ten nie ma znaczenia
+/*
+ * Wartość 1 = podział ekranu na pół dla dwóch kamer
+ * Wartość 2 = obraz z dwóch kamer w dwóch ćwiartkach dla dwóch kamer
+ * Inne wartości zwężają dwie ćwiartki dla dwóch kamer, dla większej ilości kamer parametr ten nie ma znaczenia
+ * */
 #define FOUR_FRAMES_GRID_FOR_TWO_CAMERAS 2
 
 // Ilość klatek na sekundę
 #define  FPS 60
+
+#define RED 255
+#define GREEN 0
+#define BLUE 0
+
+#define TEXT_THICKNESS 1
+#define BOX_AND_POINTS_THICKNESS 2
+
 // Minimalna wartość dla jednej kamery
 unsigned long cols = 1,
         rows = 1;
@@ -22,13 +32,65 @@ unsigned long cols = 1,
 int frameWidth,
         frameHeight;
 
-TickMeter tickmeter;
+auto textColor = Scalar(BLUE, GREEN, RED);
+
+
+TickMeter tick_meter;
 
 // Identyfikatory tekstur OpenGL
 vector<GLuint> textures;
 
 // Ścieżki do kamer
-vector<int> camerasPaths = {0, 2};
+vector<int> camerasPaths = {0}; //, 2};
+
+// Kamery
+vector<cv::VideoCapture> cameras;
+
+// Klatki kamer
+vector<cv::Mat> frames;
+
+String fd_modelPath
+, fr_modelPath;
+
+float scoreThreshold,
+        nmsThreshold;
+
+int topK;
+
+double cosine_similar_thresh = 0.363;
+double l2norm_similar_thresh = 1.128;
+
+Ptr<FaceDetectorYN> detector;
+
+
+static void visualize(Mat &input, Mat &faces, double fps, Scalar color = textColor, int text_thickness = TEXT_THICKNESS,
+                      int thickness = BOX_AND_POINTS_THICKNESS) {
+
+    auto t = time(nullptr);
+    auto now = localtime(&t);
+    char result[80];
+
+    strftime(result, sizeof(result), "%Y-%m-%d.%X", now);
+
+    string fpsString = format("FPS: %.2f %s", fps, result);
+
+    putText(input, fpsString, Point(0, 15), FONT_HERSHEY_SIMPLEX, 0.5, color, text_thickness);
+
+    for (int i = 0; i < faces.rows; i++) {
+
+        // Draw bounding box
+        rectangle(input, Rect2i(int(faces.at<float>(i, 0)), int(faces.at<float>(i, 1)), int(faces.at<float>(i, 2)),
+                                int(faces.at<float>(i, 3))), Scalar(0, 255, 0), thickness);
+        // Draw landmarks
+        circle(input, Point2i(int(faces.at<float>(i, 4)), int(faces.at<float>(i, 5))), 2, Scalar(255, 0, 0), thickness);
+        circle(input, Point2i(int(faces.at<float>(i, 6)), int(faces.at<float>(i, 7))), 2, Scalar(0, 0, 255), thickness);
+        circle(input, Point2i(int(faces.at<float>(i, 8)), int(faces.at<float>(i, 9))), 2, Scalar(0, 255, 0), thickness);
+        circle(input, Point2i(int(faces.at<float>(i, 10)), int(faces.at<float>(i, 11))), 2, Scalar(255, 0, 255),
+               thickness);
+        circle(input, Point2i(int(faces.at<float>(i, 12)), int(faces.at<float>(i, 13))), 2, Scalar(0, 255, 255),
+               thickness);
+    }
+}
 
 void countColsAndRowsForGrid() {
 
@@ -59,12 +121,6 @@ void countColsAndRowsForGrid() {
         cols = rows = 1;
     }
 }
-
-// Dostępne kamery
-vector<cv::VideoCapture> cameras;
-
-// Klatki dla kamer
-vector<cv::Mat> frames;
 
 
 void generateTexturesAndFrames(unsigned long);
@@ -109,24 +165,29 @@ void initGL() {
 void captureFrames(int) {
 
     int k = 0;
+    Mat faces,
+            frame;
 
     for (auto i: cameras) {
 
-        tickmeter.start();
+        frameWidth = int(i.get(CAP_PROP_FRAME_WIDTH));
+        frameHeight = int(i.get(CAP_PROP_FRAME_HEIGHT));
 
-        i.read(frames[k]);
+        cout<<"Frame WIDTH: "<<frameWidth<<" Frame HEIGHT: "<<frameHeight<<endl;
 
-        tickmeter.stop();
+        detector->setInputSize(Size(frameWidth, frameHeight));
 
-        auto t = time(nullptr);
-        auto now = localtime(&t);
-        char result[80];
+        tick_meter.start();
 
-        strftime(result, sizeof(result), "%Y-%m-%d.%X", now);
+        i.read(frame);
 
-        string fpsString = format("FPS: %.2f %s", tickmeter.getFPS(), result);
-        putText(frames[k], fpsString, Point(0, 15), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1.5);
+        detector->detect(frame, faces);
 
+        tick_meter.stop();
+
+        visualize(frame, faces, tick_meter.getFPS());
+
+        frames[k] = frame;
 
         k++;
     }
@@ -234,7 +295,7 @@ void initCameras() {
         // Ustawienie rozmiarów klatek
 //        cam.set(cv::CAP_PROP_FRAME_WIDTH, frameWidth);
 //        cam.set(cv::CAP_PROP_FRAME_HEIGHT, frameHeight);
-        cam.set(CAP_PROP_FPS,FPS);
+        cam.set(CAP_PROP_FPS, FPS);
 
 //        cout<<"Frame Width: "<<cam.get(CAP_PROP_FRAME_WIDTH)<<" Frame Height: "<<cam.get(CAP_PROP_FRAME_HEIGHT)<<endl;
 
@@ -245,6 +306,33 @@ void initCameras() {
 }
 
 int main(int argc, char **argv) {
+
+    CommandLineParser parser(argc, argv,
+                             "{help  h      |            | Print this message}"
+                             "{fd_model fd       | face_detection_yunet_2021dec.onnx| Path to the model. Download yunet.onnx in https://github.com/opencv/opencv_zoo/tree/master/models/face_detection_yunet}"
+                             "{fr_model fr       | face_recognition_sface_2021dec.onnx | Path to the face recognition model. Download the model at https://github.com/opencv/opencv_zoo/tree/master/models/face_recognition_sface}"
+                             "{score_threshold   | 0.9        | Filter out faces of score < score_threshold}"
+                             "{nms_threshold     | 0.3        | Suppress bounding boxes of iou >= nms_threshold}"
+                             "{top_k             | 5000       | Keep top_k bounding boxes before NMS}"
+    );
+
+
+    if (parser.has("help")) {
+        parser.printMessage();
+        return 0;
+    }
+
+    fd_modelPath = parser.get<String>("fd_model");
+    fr_modelPath = parser.get<String>("fr_model");
+
+    scoreThreshold = parser.get<float>("score_threshold");
+    nmsThreshold = parser.get<float>("nms_threshold");
+    topK = parser.get<int>("top_k");
+
+
+    // Initialize FaceDetectorYN
+    detector = FaceDetectorYN::create(fd_modelPath, "", Size(320, 320), scoreThreshold, nmsThreshold, topK);
+
 
     countColsAndRowsForGrid();
 
