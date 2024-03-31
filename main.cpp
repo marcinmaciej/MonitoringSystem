@@ -19,7 +19,7 @@ unsigned long cols = 1,
 vector<GLuint> textures;
 
 // Ścieżki do kamer
-vector<string> camerasPaths = {"/dev/video2" , "/dev/video0"};
+vector<int> camerasPaths = {0}; // , 2};
 
 void countColsAndRowsForGrid(){
 
